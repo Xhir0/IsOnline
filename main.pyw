@@ -4,6 +4,7 @@ from time import sleep
 from threading import Thread
 from subprocess import getstatusoutput
 from os.path import isfile
+from socket import gethostname, gethostbyname
 
 class DropDownTable(ttk.Combobox):
     """ Drop Down Combobox """
@@ -26,8 +27,8 @@ class App(tk.Frame):
         bg = "black"
         self.configure(bg=bg)
 
-        self.submitted_hosts, self.threads = [], []
-        self.hosts_combobox = DropDownTable(self, width=20, state="readonly", background=bg, foreground=bg)
+        self.submitted_hosts, self.threads = [gethostbyname(gethostname())], []
+        self.hosts_combobox = DropDownTable(self, width=20, state="readonly", background=bg, foreground=bg, values=self.submitted_hosts)
         self.host_entry = tk.Entry(self, textvariable=tk.StringVar(), relief=tk.FLAT, font=("Ubuntu", 10, "bold"), bg=bg, fg="whitesmoke")
         self.submit_btn = tk.Button(self, text="GO", relief=tk.FLAT, command=self.start, bg=bg, fg="whitesmoke", activebackground=bg)
 
@@ -61,7 +62,7 @@ class App(tk.Frame):
             return
         self.host = host
 
-        self.submitted_hosts.append(host)
+        if not host in self.submitted_hosts: self.submitted_hosts.append(host)
         self.hosts_combobox.setv(self.submitted_hosts)
 
         master = tk.Toplevel(self)
