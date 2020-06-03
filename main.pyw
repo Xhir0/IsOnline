@@ -27,7 +27,8 @@ class App(tk.Frame):
         bg = "black"
         self.configure(bg=bg)
 
-        self.submitted_hosts, self.threads = [gethostbyname(gethostname())], []
+        self.submitted_hosts = [gethostbyname(gethostname())]
+        self.threads = [Thread(target=self.ping), Thread(target=self.callback)]
         self.hosts_combobox = DropDownTable(self, width=20, state="readonly", background=bg, foreground=bg, values=self.submitted_hosts)
         self.host_entry = tk.Entry(self, textvariable=tk.StringVar(), relief=tk.FLAT, font=("Ubuntu", 10, "bold"), bg=bg, fg="whitesmoke")
         self.submit_btn = tk.Button(self, text="GO", relief=tk.FLAT, command=self.start, bg=bg, fg="whitesmoke", activebackground=bg)
@@ -73,12 +74,7 @@ class App(tk.Frame):
 
         self.lb = tk.Label(master, text=f"Pinging {host}", font=("Ubuntu", 13, "bold"), bg="black", fg="whitesmoke")
         self.lb.pack()
-
-        self.update_thread = Thread(target=self.ping)
-        self.threads.append(self.update_thread)
-
-        self.root_update_thread = Thread(target=self.callback)
-        self.threads.append(self.root_update_thread)
+        
 
         for thread in self.threads:
             thread._is_running = True
