@@ -1,9 +1,8 @@
 # IsOnline
-## Tkitner based GUI Host Pinger
 
-### Python Version (3.8+):
-#### - IsOnline uses Python's 'Walrus Operator',
-which is new to Version 3.8
 
-### Usage:
-#### - python main.pyw
+## Usage:
+- python3 main.pyw
+
+## Python Version (3.8+):
+- IsOnline uses Python's 'Walrus Operator'

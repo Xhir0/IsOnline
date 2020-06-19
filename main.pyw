@@ -1,16 +1,18 @@
 from tkinter import ttk
+from tkinter.font import Font
 import tkinter as tk
 from time import sleep
 from threading import Thread
 from subprocess import getstatusoutput
 from os.path import isfile
+from socket import gethostname, gethostbyname
 
 class DropDownTable(ttk.Combobox):
     """ Drop Down Combobox """
     def __init__(self, parent, **kwargs):
         ttk.Combobox.__init__(self, parent, **kwargs)
-        self.combobox_stringvar = tk.StringVar()
-        self.config(textvariable=self.combobox_stringvar)
+        self._combobox_stringvar = tk.StringVar()
+        self.config(textvariable=self._combobox_stringvar)
     
     def setv(self, values: any):
         self.config(values=values)
@@ -21,24 +23,43 @@ class DropDownTable(ttk.Combobox):
 
 class App(tk.Frame):
     """ Main Application Window """
-    def __init__(self, *args, **kwargs):
-        tk.Frame.__init__(self, *args, **kwargs)
-        bg = "black"
-        self.configure(bg=bg)
+    def __init__(self, root, WIDTH=250, HEIGHT=100):
+        self.root = root
 
-        self.submitted_hosts, self.threads = [], []
-        self.hosts_combobox = DropDownTable(self, width=20, state="readonly", background=bg, foreground=bg)
-        self.host_entry = tk.Entry(self, textvariable=tk.StringVar(), relief=tk.FLAT, font=("Ubuntu", 10, "bold"), bg=bg, fg="whitesmoke")
-        self.submit_btn = tk.Button(self, text="GO", relief=tk.FLAT, command=self.start, bg=bg, fg="whitesmoke", activebackground=bg)
+        root.resizable(0, 0)
+        root.geometry(f"{WIDTH}x{HEIGHT}")
+        root.title("IsOnline?")
+
+        if icon_available := isfile("icon.ico"):
+            root.iconbitmap("icon.ico")
+        self.icon_available = icon_available
+
+        canvas = tk.Canvas(root, highlightthickness=0, width=WIDTH, height=HEIGHT, bg="grey23")
+        canvas.pack()
+
+        self.bg, self.fg = "black", "whitesmoke"
+        self.output_lb_font = Font(family="Ubuntu", size=13)
+        canvas.configure(bg=self.bg)
+
+        self.submitted_hosts = [gethostbyname(gethostname())]
+        
+        self.hosts_combobox = DropDownTable(canvas, width=20, state="readonly", background=self.bg, foreground=self.fg, values=self.submitted_hosts)
+        canvas.create_window(110, 20, window=self.hosts_combobox)
+        self.host_entry = tk.Entry(textvariable=tk.StringVar(), relief=tk.FLAT, font=("Ubuntu", 10, "bold"), bg=self.bg, fg=self.fg)
+        canvas.create_window(110, 56, window=self.host_entry)
+        self.submit_btn = tk.Button(text="GO", relief=tk.FLAT, command=self.start, bg=self.bg, fg=self.fg, activebackground=self.bg)
+        canvas.create_window(210, 57, window=self.submit_btn)
+
+        canvas.create_line(40, 70, 180, 70, fill="white")
+        canvas.create_line(200, 70, 220, 70, fill="white")
 
         self.host = "LOCALHOST"
         self.host_entry.insert(tk.END, self.host)
 
         self.active_windows = []
-
-        self.hosts_combobox.place(relx=0.15, rely=0.15)
-        self.host_entry.place(relx=0.15, rely=0.35)
-        self.submit_btn.place(relx=0.725, rely=0.325)
+        #self.hosts_combobox.place(relx=0.15, rely=0.15)
+        #self.host_entry.place(relx=0.15, rely=0.35)
+        #self.submit_btn.place(relx=0.725, rely=0.325)
 
         self.hosts_combobox.bind("<<ComboboxSelected>>", self.combobox_select)
         self.host_entry.bind("<Return>", self.start)
@@ -53,7 +74,6 @@ class App(tk.Frame):
         if not (tmp := self.host_entry.get().strip()) == "":
             self.host_entry.delete(0, tk.END)
             self.display(tmp)
-        del tmp
 
     def display(self, host):
         """ Open a child window to display whether the host is responding or not """
@@ -61,72 +81,73 @@ class App(tk.Frame):
             return
         self.host = host
 
-        self.submitted_hosts.append(host)
+        if not host in self.submitted_hosts: self.submitted_hosts.append(host)
         self.hosts_combobox.setv(self.submitted_hosts)
 
-        master = tk.Toplevel(self)
-        if icon_available: master.iconbitmap("icon.ico")
+        master = tk.Toplevel(root)
+        if self.icon_available: master.iconbitmap("icon.ico")
         self.active_windows.append(master)
         master.wm_title("")
         master.configure(bg="black")
 
-        self.lb = tk.Label(master, text=f"Pinging {host}", font=("Ubuntu", 13, "bold"), bg="black", fg="whitesmoke")
+        self.lb = tk.Label(master, text=f"Pinging {host}", font=self.output_lb_font, bg=self.bg, fg=self.fg)
         self.lb.pack()
-
-        self.update_thread = Thread(target=self.ping)
-        self.threads.append(self.update_thread)
-
-        self.root_update_thread = Thread(target=self.callback)
-        self.threads.append(self.root_update_thread)
+        
+        self.ping_worker = Thread(target=self.ping)
+        self.hang_update_worker = Thread(target=self.callback)
+        self.threads = [self.ping_worker, self.hang_update_worker]
 
         for thread in self.threads:
             thread._is_running = True
             thread.start()
 
-        master.protocol("WM_DELETE_WINDOW", lambda: self.thread_exit(master))
+        master.protocol("WM_DELETE_WINDOW", lambda: self.exit_(master))
+        master.bind("<Control-minus>", lambda e: self.change_font(interv=-1))
+        master.bind("<Control-plus>", lambda e: self.change_font(interv=1))
+        master.bind("<Control-=>", lambda e: self.change_font(interv=1))
 
 
     def callback(self):
         """ Prevent main Tk from hanging by calling refresh every 1000 ms """
-        if self.root_update_thread._is_running:
-            self.after(1000, self.refresh)
+        if self.hang_update_worker._is_running:
+            root.after(1000, self.refresh)
     
     def refresh(self):
         """ Update the main Tk so it doesn't hang """
-        if self.root_update_thread._is_running:
-            self.update()
+        if self.hang_update_worker._is_running:
+            root.update()
             self.callback()
 
     def ping(self):
         """ Ping a host and depending on the response update a label """
-        cmd = f"PING {self.host} -l 32" # ping a host with 32 bytes of data
-        while self.update_thread._is_running:
+        cmd = f"PING {self.host} -l 32"
+        while self.ping_worker._is_running:
             try:
-                if not getstatusoutput(cmd)[0]: # if the host responds
-                    if self.update_thread._is_running: self.lb.configure(text=f"{self.host} ONLINE", fg="green")
+                if not getstatusoutput(cmd)[0]:
+                    if self.ping_worker._is_running: self.lb.configure(text=f"{self.host} ONLINE", fg="green")
                 else:
-                    if self.update_thread._is_running: self.lb.configure(text=f"{self.host} OFFLINE", fg="red")
+                    if self.ping_worker._is_running: self.lb.configure(text=f"{self.host} OFFLINE", fg="red")
             except Exception as e:
                 print(f"CAUGHT\n{e}\n")
                 exit(1)
 
-    def thread_exit(self,  master):
+    def exit_(self,  master):
         """ Stop all threads before closing Toplevel window """
         for thread in self.threads:
             thread._is_running = False
             thread.join()
 
         master.destroy()
-        # clean up lists containing destroyed window and inactive threads
         self.active_windows.remove(master)
         self.threads.clear()
 
 
+    def change_font(self, interv: int):
+        self.output_lb_font["size"] += interv
+        self.lb.config(font=self.output_lb_font)
+
+
 if __name__ == "__main__":
     root = tk.Tk()
-    root.geometry("250x100")
-    root.title("IsOnline?")
-
-    if icon_available := isfile("icon.ico"):
-        root.iconbitmap("icon.ico")
-    main = App(root) main.pack(side=tk.TOP, fill=tk.BOTH, expand=True) root.mainloop()
+    main = App(root)
+    root.mainloop()
