@@ -1,3 +1,8 @@
+"""
+@author: xhir0
+https://github.com/Xhir0/IsOnline.git
+"""
+
 from tkinter import ttk
 from tkinter.font import Font
 import tkinter as tk
@@ -120,7 +125,7 @@ class App(tk.Frame):
 
     def ping(self):
         """ Ping a host and depending on the response update a label """
-        cmd = f"PING {self.host} -l 32"
+        cmd = f"PING -n 1 {self.host} | FIND \"TTL=\""
         while self.ping_worker._is_running:
             try:
                 if not getstatusoutput(cmd)[0]:
