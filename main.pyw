@@ -4,7 +4,6 @@ from time import sleep
 from threading import Thread
 from subprocess import getstatusoutput
 from os.path import isfile
-from socket import gethostname, gethostbyname
 
 class DropDownTable(ttk.Combobox):
     """ Drop Down Combobox """
@@ -27,9 +26,8 @@ class App(tk.Frame):
         bg = "black"
         self.configure(bg=bg)
 
-        self.submitted_hosts = [gethostbyname(gethostname())]
-        
-        self.hosts_combobox = DropDownTable(self, width=20, state="readonly", background=bg, foreground=bg, values=self.submitted_hosts)
+        self.submitted_hosts, self.threads = [], []
+        self.hosts_combobox = DropDownTable(self, width=20, state="readonly", background=bg, foreground=bg)
         self.host_entry = tk.Entry(self, textvariable=tk.StringVar(), relief=tk.FLAT, font=("Ubuntu", 10, "bold"), bg=bg, fg="whitesmoke")
         self.submit_btn = tk.Button(self, text="GO", relief=tk.FLAT, command=self.start, bg=bg, fg="whitesmoke", activebackground=bg)
 
@@ -63,7 +61,7 @@ class App(tk.Frame):
             return
         self.host = host
 
-        if not host in self.submitted_hosts: self.submitted_hosts.append(host)
+        self.submitted_hosts.append(host)
         self.hosts_combobox.setv(self.submitted_hosts)
 
         master = tk.Toplevel(self)
@@ -74,49 +72,52 @@ class App(tk.Frame):
 
         self.lb = tk.Label(master, text=f"Pinging {host}", font=("Ubuntu", 13, "bold"), bg="black", fg="whitesmoke")
         self.lb.pack()
-        
-        self.ping_worker = Thread(target=self.ping)
-        self.hang_update_worker = Thread(target=self.callback)
-        self.threads = [self.ping_worker, self.hang_update_worker]
+
+        self.update_thread = Thread(target=self.ping)
+        self.threads.append(self.update_thread)
+
+        self.root_update_thread = Thread(target=self.callback)
+        self.threads.append(self.root_update_thread)
 
         for thread in self.threads:
             thread._is_running = True
             thread.start()
 
-        master.protocol("WM_DELETE_WINDOW", lambda: self.exit_(master))
+        master.protocol("WM_DELETE_WINDOW", lambda: self.thread_exit(master))
 
 
     def callback(self):
         """ Prevent main Tk from hanging by calling refresh every 1000 ms """
-        if self.hang_update_worker._is_running:
+        if self.root_update_thread._is_running:
             self.after(1000, self.refresh)
     
     def refresh(self):
         """ Update the main Tk so it doesn't hang """
-        if self.hang_update_worker._is_running:
+        if self.root_update_thread._is_running:
             self.update()
             self.callback()
 
     def ping(self):
         """ Ping a host and depending on the response update a label """
-        cmd = f"PING {self.host} -l 32"
-        while self.ping_worker._is_running:
+        cmd = f"PING {self.host} -l 32" # ping a host with 32 bytes of data
+        while self.update_thread._is_running:
             try:
-                if not getstatusoutput(cmd)[0]:
-                    if self.ping_worker._is_running: self.lb.configure(text=f"{self.host} ONLINE", fg="green")
+                if not getstatusoutput(cmd)[0]: # if the host responds
+                    if self.update_thread._is_running: self.lb.configure(text=f"{self.host} ONLINE", fg="green")
                 else:
-                    if self.ping_worker._is_running: self.lb.configure(text=f"{self.host} OFFLINE", fg="red")
+                    if self.update_thread._is_running: self.lb.configure(text=f"{self.host} OFFLINE", fg="red")
             except Exception as e:
                 print(f"CAUGHT\n{e}\n")
                 exit(1)
 
-    def exit_(self,  master):
+    def thread_exit(self,  master):
         """ Stop all threads before closing Toplevel window """
         for thread in self.threads:
             thread._is_running = False
             thread.join()
 
         master.destroy()
+        # clean up lists containing destroyed window and inactive threads
         self.active_windows.remove(master)
         self.threads.clear()
 
@@ -128,7 +129,4 @@ if __name__ == "__main__":
 
     if icon_available := isfile("icon.ico"):
         root.iconbitmap("icon.ico")
-    main = App(root)
-    main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-    root.mainloop()
+    main = App(root) main.pack(side=tk.TOP, fill=tk.BOTH, expand=True) root.mainloop()
