@@ -26,7 +26,7 @@ class DropDownTable(ttk.Combobox):
         self.config(values=[])
 
 
-class App(tk.Frame):
+class App(object):
     """ Main Application Window """
     def __init__(self, root, WIDTH=250, HEIGHT=100):
         self.root = root
